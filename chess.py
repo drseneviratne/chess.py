@@ -156,7 +156,8 @@ class ChessPiece:
         self.row = row
         self.col = col
 
-    def get_valid_moves(self, board):
+    def get_pseudo_legal_moves(self, board):
+        """Get moves without checking if they leave king in check"""
         moves = []
 
         if self.type == 'pawn':
@@ -245,6 +246,8 @@ class ChessGame:
         self.hover_timer = 0
         self.captured_white = []  # Pieces captured by white (black pieces)
         self.captured_black = []  # Pieces captured by black (white pieces)
+        self.in_check = False
+        self.checkmate = False
 
     def setup_board(self):
         for col in range(8):
@@ -255,6 +258,109 @@ class ChessGame:
         for col, piece_type in enumerate(pieces):
             self.board[0][col] = ChessPiece(piece_type, 'black', 0, col)
             self.board[7][col] = ChessPiece(piece_type, 'white', 7, col)
+
+    def find_king(self, color):
+        """Find the position of the king for the given color"""
+        for row in range(8):
+            for col in range(8):
+                piece = self.board[row][col]
+                if piece and piece.type == 'king' and piece.color == color:
+                    return (row, col)
+        return None
+
+    def is_square_attacked(self, row, col, by_color):
+        """Check if a square is attacked by any piece of the given color"""
+        for r in range(8):
+            for c in range(8):
+                piece = self.board[r][c]
+                if piece and piece.color == by_color:
+                    moves = piece.get_pseudo_legal_moves(self.board)
+                    if (row, col) in moves:
+                        return True
+        return False
+
+    def is_in_check(self, color):
+        """Check if the given color's king is in check"""
+        king_pos = self.find_king(color)
+        if not king_pos:
+            return False
+        opponent_color = 'black' if color == 'white' else 'white'
+        return self.is_square_attacked(king_pos[0], king_pos[1], opponent_color)
+
+    def simulate_move(self, piece, to_row, to_col):
+        """Simulate a move and return the resulting board state"""
+        # Create a temporary board copy
+        temp_board = [[None for _ in range(8)] for _ in range(8)]
+        for r in range(8):
+            for c in range(8):
+                if self.board[r][c]:
+                    p = self.board[r][c]
+                    temp_board[r][c] = ChessPiece(p.type, p.color, r, c)
+
+        # Make the move on temp board
+        from_row, from_col = piece.row, piece.col
+        captured = temp_board[to_row][to_col]
+        temp_board[from_row][from_col] = None
+        temp_piece = temp_board[to_row][to_col] = ChessPiece(piece.type, piece.color, to_row, to_col)
+
+        return temp_board, captured
+
+    def would_be_in_check(self, piece, to_row, to_col):
+        """Check if making this move would leave own king in check"""
+        temp_board, _ = self.simulate_move(piece, to_row, to_col)
+
+        # Find king position in temp board
+        king_pos = None
+        for r in range(8):
+            for c in range(8):
+                p = temp_board[r][c]
+                if p and p.type == 'king' and p.color == piece.color:
+                    king_pos = (r, c)
+                    break
+
+        if not king_pos:
+            return False
+
+        # Check if king would be attacked
+        opponent_color = 'black' if piece.color == 'white' else 'white'
+        for r in range(8):
+            for c in range(8):
+                p = temp_board[r][c]
+                if p and p.color == opponent_color:
+                    moves = p.get_pseudo_legal_moves(temp_board)
+                    if king_pos in moves:
+                        return True
+        return False
+
+    def get_legal_moves(self, piece):
+        """Get all legal moves for a piece (excluding moves that leave king in check)"""
+        pseudo_moves = piece.get_pseudo_legal_moves(self.board)
+        legal_moves = []
+
+        for move in pseudo_moves:
+            if not self.would_be_in_check(piece, move[0], move[1]):
+                legal_moves.append(move)
+
+        return legal_moves
+
+    def has_legal_moves(self, color):
+        """Check if the given color has any legal moves"""
+        for row in range(8):
+            for col in range(8):
+                piece = self.board[row][col]
+                if piece and piece.color == color:
+                    if len(self.get_legal_moves(piece)) > 0:
+                        return True
+        return False
+
+    def check_game_state(self):
+        """Check for check and checkmate"""
+        self.in_check = self.is_in_check(self.current_turn)
+
+        if self.in_check and not self.has_legal_moves(self.current_turn):
+            self.checkmate = True
+        else:
+            self.checkmate = False
 
     def get_square_from_pos(self, x, y):
         col = (x - BOARD_OFFSET_X) // SQUARE_SIZE
@@ -329,12 +435,15 @@ class ChessGame:
                     self.current_turn = 'black' if self.current_turn == 'white' else 'white'
                     self.selected_piece = None
                     self.valid_moves = []
+
+                    # Check game state after move
+                    self.check_game_state()
             else:
                 # Try to select piece
                 piece = self.board[row][col]
                 if piece and piece.color == self.current_turn:
                     self.selected_piece = piece
-                    self.valid_moves = piece.get_valid_moves(self.board)
+                    self.valid_moves = self.get_legal_moves(piece)
 
     def draw(self, screen):
         for row in range(8):
@@ -350,6 +459,11 @@ class ChessGame:
 
                 if (row, col) in self.valid_moves:
                     color = tuple(max(0, c - 30) for c in color)
+
+                # Highlight king square if in check
+                piece = self.board[row][col]
+                if self.in_check and piece and piece.type == 'king' and piece.color == self.current_turn:
+                    color = (220, 100, 100)
 
                 pygame.draw.rect(screen, color, (x, y, SQUARE_SIZE, SQUARE_SIZE))
                 pygame.draw.rect(screen, (100, 100, 100), (x, y, SQUARE_SIZE, SQUARE_SIZE), 1)
@@ -431,6 +545,7 @@ def main():
     tracker = HandTracker()
 
     font = pygame.font.SysFont(None, 28)
+    large_font = pygame.font.SysFont(None, 40)
 
     running = True
     while running:
@@ -448,6 +563,20 @@ def main():
         game.draw(screen)
 
         draw_pointer(screen, pointer_pos, game.get_hover_progress())
+
+        # Status text
+        if game.checkmate:
+            winner = 'BLACK' if game.current_turn == 'white' else 'WHITE'
+            checkmate_text = f"CHECKMATE! {winner} WINS!"
+            text_surface = large_font.render(checkmate_text, True, (255, 50, 50))
+            text_rect = text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            # Draw background box
+            pygame.draw.rect(screen, (20, 20, 20), text_rect.inflate(40, 20))
+            screen.blit(text_surface, text_rect)
+        elif game.in_check:
+            check_text = f"{game.current_turn.upper()} IS IN CHECK!"
+            text_surface = large_font.render(check_text, True, (255, 100, 100))
+            screen.blit(text_surface, (WIDTH // 2 - 150, HEIGHT // 2 - 200))
 
         turn_text = f"{game.current_turn.upper()}'s turn"
         status_text = "Hover to select/move | Leave frame to cancel"
