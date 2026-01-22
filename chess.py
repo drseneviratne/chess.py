@@ -110,6 +110,85 @@ def draw_chess_piece(screen, piece_type, color, x, y, size):
         pygame.draw.polygon(screen, outline_color, points, 2)
 
 
+def get_piece_moves(piece_type, piece_color, from_row, from_col, board):
+    """Get pseudo-legal moves for any piece on any board"""
+    moves = []
+
+    if piece_type == 'pawn':
+        direction = -1 if piece_color == 'white' else 1
+        if 0 <= from_row + direction < 8 and board[from_row + direction][from_col] is None:
+            moves.append((from_row + direction, from_col))
+            start_row = 6 if piece_color == 'white' else 1
+            if from_row == start_row and board[from_row + 2*direction][from_col] is None:
+                moves.append((from_row + 2*direction, from_col))
+        for dc in [-1, 1]:
+            new_row, new_col = from_row + direction, from_col + dc
+            if 0 <= new_row < 8 and 0 <= new_col < 8:
+                target = board[new_row][new_col]
+                if target and target.color != piece_color:
+                    moves.append((new_row, new_col))
+
+    elif piece_type == 'rook':
+        for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            for i in range(1, 8):
+                new_row, new_col = from_row + dr*i, from_col + dc*i
+                if not (0 <= new_row < 8 and 0 <= new_col < 8):
+                    break
+                target = board[new_row][new_col]
+                if target:
+                    if target.color != piece_color:
+                        moves.append((new_row, new_col))
+                    break
+                moves.append((new_row, new_col))
+
+    elif piece_type == 'knight':
+        for dr, dc in [(2,1), (2,-1), (-2,1), (-2,-1), (1,2), (1,-2), (-1,2), (-1,-2)]:
+            new_row, new_col = from_row + dr, from_col + dc
+            if 0 <= new_row < 8 and 0 <= new_col < 8:
+                target = board[new_row][new_col]
+                if not target or target.color != piece_color:
+                    moves.append((new_row, new_col))
+
+    elif piece_type == 'bishop':
+        for dr, dc in [(1, 1), (1, -1), (-1, 1), (-1, -1)]:
+            for i in range(1, 8):
+                new_row, new_col = from_row + dr*i, from_col + dc*i
+                if not (0 <= new_row < 8 and 0 <= new_col < 8):
+                    break
+                target = board[new_row][new_col]
+                if target:
+                    if target.color != piece_color:
+                        moves.append((new_row, new_col))
+                    break
+                moves.append((new_row, new_col))
+
+    elif piece_type == 'queen':
+        for dr, dc in [(0,1), (0,-1), (1,0), (-1,0), (1,1), (1,-1), (-1,1), (-1,-1)]:
+            for i in range(1, 8):
+                new_row, new_col = from_row + dr*i, from_col + dc*i
+                if not (0 <= new_row < 8 and 0 <= new_col < 8):
+                    break
+                target = board[new_row][new_col]
+                if target:
+                    if target.color != piece_color:
+                        moves.append((new_row, new_col))
+                    break
+                moves.append((new_row, new_col))
+
+    elif piece_type == 'king':
+        for dr in [-1, 0, 1]:
+            for dc in [-1, 0, 1]:
+                if dr == 0 and dc == 0:
+                    continue
+                new_row, new_col = from_row + dr, from_col + dc
+                if 0 <= new_row < 8 and 0 <= new_col < 8:
+                    target = board[new_row][new_col]
+                    if not target or target.color != piece_color:
+                        moves.append((new_row, new_col))
+
+    return moves
+
+
 class HandTracker:
     def __init__(self):
         options = vision.HandLandmarkerOptions(
@@ -156,84 +235,6 @@ class ChessPiece:
         self.row = row
         self.col = col
 
-    def get_pseudo_legal_moves(self, board):
-        """Get moves without checking if they leave king in check"""
-        moves = []
-
-        if self.type == 'pawn':
-            direction = -1 if self.color == 'white' else 1
-            if 0 <= self.row + direction < 8 and board[self.row + direction][self.col] is None:
-                moves.append((self.row + direction, self.col))
-                start_row = 6 if self.color == 'white' else 1
-                if self.row == start_row and board[self.row + 2*direction][self.col] is None:
-                    moves.append((self.row + 2*direction, self.col))
-            for dc in [-1, 1]:
-                new_row, new_col = self.row + direction, self.col + dc
-                if 0 <= new_row < 8 and 0 <= new_col < 8:
-                    target = board[new_row][new_col]
-                    if target and target.color != self.color:
-                        moves.append((new_row, new_col))
-
-        elif self.type == 'rook':
-            for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                for i in range(1, 8):
-                    new_row, new_col = self.row + dr*i, self.col + dc*i
-                    if not (0 <= new_row < 8 and 0 <= new_col < 8):
-                        break
-                    target = board[new_row][new_col]
-                    if target:
-                        if target.color != self.color:
-                            moves.append((new_row, new_col))
-                        break
-                    moves.append((new_row, new_col))
-
-        elif self.type == 'knight':
-            for dr, dc in [(2,1), (2,-1), (-2,1), (-2,-1), (1,2), (1,-2), (-1,2), (-1,-2)]:
-                new_row, new_col = self.row + dr, self.col + dc
-                if 0 <= new_row < 8 and 0 <= new_col < 8:
-                    target = board[new_row][new_col]
-                    if not target or target.color != self.color:
-                        moves.append((new_row, new_col))
-
-        elif self.type == 'bishop':
-            for dr, dc in [(1, 1), (1, -1), (-1, 1), (-1, -1)]:
-                for i in range(1, 8):
-                    new_row, new_col = self.row + dr*i, self.col + dc*i
-                    if not (0 <= new_row < 8 and 0 <= new_col < 8):
-                        break
-                    target = board[new_row][new_col]
-                    if target:
-                        if target.color != self.color:
-                            moves.append((new_row, new_col))
-                        break
-                    moves.append((new_row, new_col))
-
-        elif self.type == 'queen':
-            for dr, dc in [(0,1), (0,-1), (1,0), (-1,0), (1,1), (1,-1), (-1,1), (-1,-1)]:
-                for i in range(1, 8):
-                    new_row, new_col = self.row + dr*i, self.col + dc*i
-                    if not (0 <= new_row < 8 and 0 <= new_col < 8):
-                        break
-                    target = board[new_row][new_col]
-                    if target:
-                        if target.color != self.color:
-                            moves.append((new_row, new_col))
-                        break
-                    moves.append((new_row, new_col))
-
-        elif self.type == 'king':
-            for dr in [-1, 0, 1]:
-                for dc in [-1, 0, 1]:
-                    if dr == 0 and dc == 0:
-                        continue
-                    new_row, new_col = self.row + dr, self.col + dc
-                    if 0 <= new_row < 8 and 0 <= new_col < 8:
-                        target = board[new_row][new_col]
-                        if not target or target.color != self.color:
-                            moves.append((new_row, new_col))
-
-        return moves
-
 
 class ChessGame:
     def __init__(self):
@@ -259,82 +260,60 @@ class ChessGame:
             self.board[0][col] = ChessPiece(piece_type, 'black', 0, col)
             self.board[7][col] = ChessPiece(piece_type, 'white', 7, col)
 
-    def find_king(self, color):
-        """Find the position of the king for the given color"""
+    def find_king(self, color, board):
+        """Find the position of the king for the given color on given board"""
         for row in range(8):
             for col in range(8):
-                piece = self.board[row][col]
+                piece = board[row][col]
                 if piece and piece.type == 'king' and piece.color == color:
                     return (row, col)
         return None
 
-    def is_square_attacked(self, row, col, by_color):
-        """Check if a square is attacked by any piece of the given color"""
+    def is_square_attacked(self, row, col, by_color, board):
+        """Check if a square is attacked by any piece of the given color on given board"""
         for r in range(8):
             for c in range(8):
-                piece = self.board[r][c]
+                piece = board[r][c]
                 if piece and piece.color == by_color:
-                    moves = piece.get_pseudo_legal_moves(self.board)
+                    moves = get_piece_moves(piece.type, piece.color, r, c, board)
                     if (row, col) in moves:
                         return True
         return False
 
-    def is_in_check(self, color):
-        """Check if the given color's king is in check"""
-        king_pos = self.find_king(color)
+    def is_in_check(self, color, board):
+        """Check if the given color's king is in check on given board"""
+        king_pos = self.find_king(color, board)
         if not king_pos:
             return False
         opponent_color = 'black' if color == 'white' else 'white'
-        return self.is_square_attacked(king_pos[0], king_pos[1], opponent_color)
+        return self.is_square_attacked(king_pos[0], king_pos[1], opponent_color, board)
 
-    def simulate_move(self, piece, to_row, to_col):
-        """Simulate a move and return the resulting board state"""
-        # Create a temporary board copy
+    def copy_board(self):
+        """Create a deep copy of the board"""
         temp_board = [[None for _ in range(8)] for _ in range(8)]
         for r in range(8):
             for c in range(8):
                 if self.board[r][c]:
                     p = self.board[r][c]
                     temp_board[r][c] = ChessPiece(p.type, p.color, r, c)
-
-        # Make the move on temp board
-        from_row, from_col = piece.row, piece.col
-        captured = temp_board[to_row][to_col]
-        temp_board[from_row][from_col] = None
-        temp_piece = temp_board[to_row][to_col] = ChessPiece(piece.type, piece.color, to_row, to_col)
-
-        return temp_board, captured
+        return temp_board
 
     def would_be_in_check(self, piece, to_row, to_col):
         """Check if making this move would leave own king in check"""
-        temp_board, _ = self.simulate_move(piece, to_row, to_col)
+        # Create temp board
+        temp_board = self.copy_board()
 
-        # Find king position in temp board
-        king_pos = None
-        for r in range(8):
-            for c in range(8):
-                p = temp_board[r][c]
-                if p and p.type == 'king' and p.color == piece.color:
-                    king_pos = (r, c)
-                    break
+        # Make the move on temp board
+        from_row, from_col = piece.row, piece.col
+        temp_board[from_row][from_col] = None
+        temp_board[to_row][to_col] = ChessPiece(piece.type, piece.color, to_row, to_col)
 
-        if not king_pos:
-            return False
-
-        # Check if king would be attacked
-        opponent_color = 'black' if piece.color == 'white' else 'white'
-        for r in range(8):
-            for c in range(8):
-                p = temp_board[r][c]
-                if p and p.color == opponent_color:
-                    moves = p.get_pseudo_legal_moves(temp_board)
-                    if king_pos in moves:
-                        return True
-        return False
+        # Check if king would be in check on the temp board
+        return self.is_in_check(piece.color, temp_board)
 
     def get_legal_moves(self, piece):
         """Get all legal moves for a piece (excluding moves that leave king in check)"""
-        pseudo_moves = piece.get_pseudo_legal_moves(self.board)
+        pseudo_moves = get_piece_moves(piece.type, piece.color, piece.row, piece.col, self.board)
         legal_moves = []
 
         for move in pseudo_moves:
@@ -355,7 +334,7 @@ class ChessGame:
 
     def check_game_state(self):
         """Check for check and checkmate"""
-        self.in_check = self.is_in_check(self.current_turn)
+        self.in_check = self.is_in_check(self.current_turn, self.board)
 
         if self.in_check and not self.has_legal_moves(self.current_turn):
             self.checkmate = True
@@ -576,7 +555,7 @@ def main():
         elif game.in_check:
             check_text = f"{game.current_turn.upper()} IS IN CHECK!"
             text_surface = large_font.render(check_text, True, (255, 100, 100))
-            screen.blit(text_surface, (WIDTH // 2 - 150, HEIGHT // 2 - 200))
+            screen.blit(text_surface, (WIDTH // 2 - 180, HEIGHT // 2 - 200))
 
         turn_text = f"{game.current_turn.upper()}'s turn"
         status_text = "Hover to select/move | Leave frame to cancel"
